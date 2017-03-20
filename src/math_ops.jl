@@ -27,10 +27,9 @@ julia> norm(A)
 @inline Base.norm(S::Tensor{4, 3}) = sqrt(mapreduce(abs2, +, S))
 
 @generated function Base.norm{dim}(S::FourthOrderTensor{dim})
-    idx(i,j,k,l) = compute_index(get_base(S), i, j, k, l)
     ex = Expr[]
     for l in 1:dim, k in 1:dim, j in 1:dim, i in 1:dim
-        push!(ex, :(get_data(S)[$(idx(i,j,k,l))]))
+        push!(ex, :(S[$i, $j, $k, $l]))
     end
     exp = reducer(ex, ex)
     return quote
@@ -58,12 +57,12 @@ julia> det(A)
 -0.1005427219925894
 ```
 """
-@inline Base.det(t::SecondOrderTensor{1}) = @inboundsret t[1,1]
-@inline Base.det(t::SecondOrderTensor{2}) = @inboundsret (t[1,1] * t[2,2] - t[1,2] * t[2,1])
-@inline function Base.det(t::SecondOrderTensor{3})
-    @inboundsret (t[1,1] * (t[2,2]*t[3,3] - t[2,3]*t[3,2]) -
-                  t[1,2] * (t[2,1]*t[3,3] - t[2,3]*t[3,1]) +
-                  t[1,3] * (t[2,1]*t[3,2] - t[2,2]*t[3,1]))
+@inline Base.det(S::SecondOrderTensor{1}) = @inboundsret S[1,1]
+@inline Base.det(S::SecondOrderTensor{2}) = @inboundsret (S[1,1] * S[2,2] - S[1,2] * S[2,1])
+@inline function Base.det(S::SecondOrderTensor{3})
+    @inboundsret (S[1,1] * (S[2,2]*S[3,3] - S[2,3]*S[3,2]) -
+                  S[1,2] * (S[2,1]*S[3,3] - S[2,3]*S[3,1]) +
+                  S[1,3] * (S[2,1]*S[3,2] - S[2,2]*S[3,1]))
 end
 
 """
@@ -88,67 +87,61 @@ julia> inv(A)
  -68.541     81.4917  -38.8361
 ```
 """
-@generated function Base.inv{dim}(t::Tensor{2, dim})
-    Tt = get_base(t)
-    idx(i,j) = compute_index(Tt, i, j)
+@generated function Base.inv{dim}(S::Tensor{2, dim})
+    Tt = get_base(S)
     if dim == 1
         ex = :($Tt((dinv, )))
     elseif dim == 2
         ex = quote
-            v = get_data(t)
-            $Tt((v[$(idx(2,2))] * dinv, -v[$(idx(2,1))] * dinv,
-                -v[$(idx(1,2))] * dinv,  v[$(idx(1,1))] * dinv))
+            $Tt((S[2, 2] * dinv, -S[2, 1] * dinv,
+                -S[1, 2] * dinv,  S[1, 1] * dinv))
         end
     else # dim == 3
         ex = quote
-            v = get_data(t)
-            $Tt(((v[$(idx(2,2))]*v[$(idx(3,3))] - v[$(idx(2,3))]*v[$(idx(3,2))]) * dinv,
-                -(v[$(idx(2,1))]*v[$(idx(3,3))] - v[$(idx(2,3))]*v[$(idx(3,1))]) * dinv,
-                 (v[$(idx(2,1))]*v[$(idx(3,2))] - v[$(idx(2,2))]*v[$(idx(3,1))]) * dinv,
+            $Tt(((S[2, 2]*S[3, 3] - S[2, 3]*S[3, 2]) * dinv,
+                -(S[2, 1]*S[3, 3] - S[2, 3]*S[3, 1]) * dinv,
+                 (S[2, 1]*S[3, 2] - S[2, 2]*S[3, 1]) * dinv,
 
-                -(v[$(idx(1,2))]*v[$(idx(3,3))] - v[$(idx(1,3))]*v[$(idx(3,2))]) * dinv,
-                 (v[$(idx(1,1))]*v[$(idx(3,3))] - v[$(idx(1,3))]*v[$(idx(3,1))]) * dinv,
-                -(v[$(idx(1,1))]*v[$(idx(3,2))] - v[$(idx(1,2))]*v[$(idx(3,1))]) * dinv,
+                -(S[1, 2]*S[3, 3] - S[1, 3]*S[3, 2]) * dinv,
+                 (S[1, 1]*S[3, 3] - S[1, 3]*S[3, 1]) * dinv,
+                -(S[1, 1]*S[3, 2] - S[1, 2]*S[3, 1]) * dinv,
 
-                 (v[$(idx(1,2))]*v[$(idx(2,3))] - v[$(idx(1,3))]*v[$(idx(2,2))]) * dinv,
-                -(v[$(idx(1,1))]*v[$(idx(2,3))] - v[$(idx(1,3))]*v[$(idx(2,1))]) * dinv,
-                 (v[$(idx(1,1))]*v[$(idx(2,2))] - v[$(idx(1,2))]*v[$(idx(2,1))]) * dinv))
+                 (S[1, 2]*S[2, 3] - S[1, 3]*S[2, 2]) * dinv,
+                -(S[1, 1]*S[2, 3] - S[1, 3]*S[2, 1]) * dinv,
+                 (S[1, 1]*S[2, 2] - S[1, 2]*S[2, 1]) * dinv))
         end
     end
     return quote
         $(Expr(:meta, :inline))
-        dinv = 1 / det(t)
+        dinv = 1 / det(S)
         @inbounds return $ex
     end
 end
 
-@generated function Base.inv{dim}(t::SymmetricTensor{2, dim})
-    Tt = get_base(t)
-    idx(i,j) = compute_index(Tt, i, j)
+@generated function Base.inv{dim}(S::SymmetricTensor{2, dim})
+    Tt = get_base(S)
     if dim == 1
         ex = :($Tt((dinv, )))
     elseif dim == 2
         ex = quote
-            v = get_data(t)
-            $Tt((v[$(idx(2,2))] * dinv, -v[$(idx(2,1))] * dinv,
-                 v[$(idx(1,1))] * dinv))
+            $Tt((S[2, 2] * dinv, -S[2, 1] * dinv,
+                 S[1, 1] * dinv))
         end
     else # dim == 3
         ex = quote
-            v = get_data(t)
-            $Tt(((v[$(idx(2,2))]*v[$(idx(3,3))] - v[$(idx(2,3))]*v[$(idx(3,2))]) * dinv,
-                -(v[$(idx(2,1))]*v[$(idx(3,3))] - v[$(idx(2,3))]*v[$(idx(3,1))]) * dinv,
-                 (v[$(idx(2,1))]*v[$(idx(3,2))] - v[$(idx(2,2))]*v[$(idx(3,1))]) * dinv,
+            $Tt(((S[2, 2]*S[3, 3] - S[2, 3]*S[3, 2]) * dinv,
+                -(S[2, 1]*S[3, 3] - S[2, 3]*S[3, 1]) * dinv,
+                 (S[2, 1]*S[3, 2] - S[2, 2]*S[3, 1]) * dinv,
 
-                 (v[$(idx(1,1))]*v[$(idx(3,3))] - v[$(idx(1,3))]*v[$(idx(3,1))]) * dinv,
-                -(v[$(idx(1,1))]*v[$(idx(3,2))] - v[$(idx(1,2))]*v[$(idx(3,1))]) * dinv,
+                 (S[1, 1]*S[3, 3] - S[1, 3]*S[3, 1]) * dinv,
+                -(S[1, 1]*S[3, 2] - S[1, 2]*S[3, 1]) * dinv,
 
-                 (v[$(idx(1,1))]*v[$(idx(2,2))] - v[$(idx(1,2))]*v[$(idx(2,1))]) * dinv))
+                 (S[1, 1]*S[2, 2] - S[1, 2]*S[2, 1]) * dinv))
         end
     end
     return quote
         $(Expr(:meta, :inline))
-        dinv = 1 / det(t)
+        dinv = 1 / det(S)
         @inbounds return $ex
     end
 end
@@ -217,8 +210,7 @@ julia> trace(A)
 ```
 """
 @generated function Base.trace{dim}(S::SecondOrderTensor{dim})
-    idx(i,j) = compute_index(get_base(S), i, j)
-    ex = Expr[:(get_data(S)[$(idx(i,i))]) for i in 1:dim]
+    ex = Expr[:(S[$i, $i]) for i in 1:dim]
     exp = reduce((ex1, ex2) -> :(+($ex1, $ex2)), ex)
     @inbounds return exp
 end
