@@ -378,3 +378,42 @@ function hessian(f::F, v::Union{SecondOrderTensor, Vec}, ::Symbol) where {F}
     gradf = y -> gradient(f, y)
     return gradient(gradf, v), gradient(f, v, :all)...
 end
+
+function curl(f::F, v::Vec)
+    ∇f = gradient(f, v)
+end
+
+
+# """
+#     div(f, x)
+
+#
+# """
+@eval Tensors begin
+@inline function _extract_divergence(v::Vec{3, <: Dual}, ::Vec{3})
+    @inbounds begin
+        p1, p2, p3 = partials(v[1]), partials(v[2]), partials(v[3])
+        ∇f = p1[1] + p2[2] + p3[3]
+    end
+    return ∇f
+end
+
+
+@inline function div1(f::F, v::Vec) where {F}
+    v_dual = _load(v)
+    res = f(v_dual)
+    return _extract_divergence(res, v)
+end
+
+
+@inline function div2(f::F, v::Vec) where {F}
+    return trace(gradient(f, v))
+end
+
+end
+
+
+function curl(f::F, v::Vec{3}) where {F}
+    ∇f = gradient(f, v)
+    return Vec{3}((∇f[3,2] - ∇f[2,3], ∇f[1,3] - ∇f[3,1], ∇f[2,1] - ∇f[1,2]))
+end
